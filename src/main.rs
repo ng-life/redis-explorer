@@ -114,6 +114,7 @@ enum RedisConnection {
 struct ScanNode {
     host: String,
     port: u16,
+    node_id: Option<String>,
     cursor: u64,
 }
 
@@ -121,6 +122,8 @@ struct ScanNode {
 struct ScanState {
     nodes: Vec<ScanNode>,
     current: usize,
+    #[serde(default)]
+    use_node_id: bool,
 }
 
 #[derive(Serialize)]
@@ -489,7 +492,8 @@ async fn scan_keys(
     let mut rounds = 0;
     while keys.len() < batch_size && state.current < state.nodes.len() && rounds < 8 {
         rounds += 1;
-        let node = &mut state.nodes[state.current];
+        let node_index = state.current;
+        let node = &state.nodes[node_index];
         let mut command = redis::cmd("SCAN");
         command
             .arg(node.cursor)
@@ -497,17 +501,38 @@ async fn scan_keys(
             .arg(pattern)
             .arg("COUNT")
             .arg(batch_size);
+        if state.use_node_id {
+            if let Some(node_id) = &node.node_id {
+                command.arg(node_id);
+            }
+        }
         let response = match connection {
             RedisConnection::Cluster(cluster) => {
                 let routing = RoutingInfo::SingleNode(SingleNodeRoutingInfo::ByAddress {
                     host: node.host.clone(),
                     port: node.port,
                 });
-                cluster.route_command(command, routing).await?
+                let response = cluster
+                    .route_command(command.clone(), routing.clone())
+                    .await?;
+                if !state.use_node_id && is_tencent_invalid_node_error(&response) {
+                    let Some(node_id) = &node.node_id else {
+                        return Err(redis::RedisError::from((
+                            redis::ErrorKind::Client,
+                            "Cluster SCAN requires a node ID, but no primary node ID was found",
+                        )));
+                    };
+                    command.arg(node_id);
+                    state.use_node_id = true;
+                    cluster.route_command(command, routing).await?
+                } else {
+                    response
+                }
             }
             RedisConnection::Direct(direct) => command.query_async(direct).await?,
         };
         let (next_cursor, page): (u64, Vec<String>) = redis::from_redis_value(response)?;
+        let node = &mut state.nodes[node_index];
         node.cursor = next_cursor;
         scanned += page.len();
         keys.extend(page);
@@ -518,36 +543,65 @@ async fn scan_keys(
     Ok((keys, scanned))
 }
 
+fn is_tencent_invalid_node_error(value: &Value) -> bool {
+    matches!(value, Value::ServerError(error)
+    if error.code().eq_ignore_ascii_case("ERR")
+        && error.details().is_some_and(|details| {
+            details.to_ascii_lowercase().contains("invalid node")
+        }))
+}
+
 async fn discover_cluster_nodes(
     connection: &mut RedisConnection,
 ) -> redis::RedisResult<Vec<ScanNode>> {
     let mut command = redis::cmd("CLUSTER");
-    command.arg("SLOTS");
+    command.arg("NODES");
     let response = execute(connection, command).await?;
-    let slots: Vec<Vec<Value>> = redis::from_redis_value(response)?;
     let mut nodes = BTreeMap::new();
-    for slot in slots {
-        let Some(Value::Array(primary)) = slot.get(2) else {
+    let cluster_nodes = value_text(&response).ok_or_else(|| {
+        redis::RedisError::from((
+            redis::ErrorKind::Client,
+            "CLUSTER NODES returned an unexpected response",
+        ))
+    })?;
+    for line in cluster_nodes.lines() {
+        let fields = line.split_whitespace().collect::<Vec<_>>();
+        if fields.len() < 3 {
+            continue;
+        }
+        let flags = fields[2].split(',').collect::<Vec<_>>();
+        if !flags.contains(&"master")
+            || flags
+                .iter()
+                .any(|flag| matches!(*flag, "fail" | "fail?" | "handshake" | "noaddr"))
+        {
+            continue;
+        }
+        let address = fields[1]
+            .split('@')
+            .next()
+            .unwrap_or(fields[1])
+            .split(',')
+            .next()
+            .unwrap_or(fields[1]);
+        let Some((host, port)) = address.rsplit_once(':') else {
             continue;
         };
-        let Some(host) = primary.first().and_then(value_text) else {
+        let host = host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_string();
+        let Ok(port) = port.parse::<u16>() else {
             continue;
         };
-        let Some(port) = primary
-            .get(1)
-            .and_then(value_int)
-            .and_then(|value| u16::try_from(value).ok())
-        else {
-            continue;
-        };
-        nodes.insert(
-            (host.clone(), port),
-            ScanNode {
+        nodes
+            .entry(fields[0].to_string())
+            .or_insert_with(|| ScanNode {
                 host,
                 port,
+                node_id: Some(fields[0].to_string()),
                 cursor: 0,
-            },
-        );
+            });
     }
     if nodes.is_empty() {
         return Err(redis::RedisError::from((
@@ -582,9 +636,11 @@ async fn list_keys(
         nodes: vec![ScanNode {
             host: String::new(),
             port: 0,
+            node_id: None,
             cursor: 0,
         }],
         current: 0,
+        use_node_id: false,
     });
     if matches!(instance.mode, RedisMode::Cluster) && query.get("cursor").is_none() {
         scan_state.nodes = discover_cluster_nodes(&mut connection)

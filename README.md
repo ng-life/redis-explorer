@@ -1,6 +1,6 @@
 # Redis Explorer
 
-一个使用 Rust 编写的 Redis Web 浏览器。支持多个 Redis 独立实例、Sentinel 和 Cluster，通过浏览器查看数据库、按 `:` 分层浏览 key，并查看常见数据类型。
+一个使用 Rust 编写的 Redis Web 浏览器。支持多个 Redis 独立实例、Sentinel 和 Cluster，通过浏览器查看数据库、按 `:` 分层浏览 key，并查看常见数据类型。Cluster 模式会逐个主节点使用游标扫描；对腾讯云旧版代理自动在 `SCAN` 中补充节点 ID。
 
 ## 配置
 
