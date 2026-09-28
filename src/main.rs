@@ -71,6 +71,9 @@ struct Instance {
     password: Option<String>,
     #[serde(default)]
     tls: bool,
+    /// Append the Redis Cluster node ID to SCAN (for compatible proxy extensions).
+    #[serde(default)]
+    scan_node_id: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -130,12 +133,15 @@ struct ScanState {
 struct KeyEntry {
     name: String,
     key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_b64: Option<String>,
     is_dir: bool,
 }
 
 #[derive(Serialize)]
 struct KeyPage {
     prefix: String,
+    view: String,
     nodes: Vec<KeyEntry>,
     cursor: Option<String>,
     scanned: usize,
@@ -178,6 +184,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     username: None,
                     password: None,
                     tls: address.starts_with("rediss://"),
+                    scan_node_id: false,
                 }
             })
             .collect();
@@ -284,7 +291,7 @@ fn api_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Str
 }
 
 fn redis_error(error: redis::RedisError) -> (StatusCode, String) {
-    tracing::warn!(kind = ?error.kind(), "Redis request failed");
+    tracing::warn!(kind = ?error.kind(), error = %error, "Redis request failed");
     api_error(
         StatusCode::BAD_GATEWAY,
         "Redis request failed; check address, credentials, TLS, and ACL permissions",
@@ -486,7 +493,7 @@ async fn scan_keys(
     state: &mut ScanState,
     pattern: &str,
     batch_size: usize,
-) -> redis::RedisResult<(Vec<String>, usize)> {
+) -> redis::RedisResult<(Vec<Vec<u8>>, usize)> {
     let mut keys = Vec::new();
     let mut scanned = 0;
     let mut rounds = 0;
@@ -512,26 +519,13 @@ async fn scan_keys(
                     host: node.host.clone(),
                     port: node.port,
                 });
-                let response = cluster
-                    .route_command(command.clone(), routing.clone())
-                    .await?;
-                if !state.use_node_id && is_tencent_invalid_node_error(&response) {
-                    let Some(node_id) = &node.node_id else {
-                        return Err(redis::RedisError::from((
-                            redis::ErrorKind::Client,
-                            "Cluster SCAN requires a node ID, but no primary node ID was found",
-                        )));
-                    };
-                    command.arg(node_id);
-                    state.use_node_id = true;
-                    cluster.route_command(command, routing).await?
-                } else {
-                    response
-                }
+                cluster.route_command(command, routing).await?
             }
             RedisConnection::Direct(direct) => command.query_async(direct).await?,
         };
-        let (next_cursor, page): (u64, Vec<String>) = redis::from_redis_value(response)?;
+        // Redis keys are arbitrary bytes. Keep the raw bytes so a binary key
+        // cannot make conversion of the whole SCAN page fail.
+        let (next_cursor, page): (u64, Vec<Vec<u8>>) = redis::from_redis_value(response)?;
         let node = &mut state.nodes[node_index];
         node.cursor = next_cursor;
         scanned += page.len();
@@ -541,14 +535,6 @@ async fn scan_keys(
         }
     }
     Ok((keys, scanned))
-}
-
-fn is_tencent_invalid_node_error(value: &Value) -> bool {
-    matches!(value, Value::ServerError(error)
-    if error.code().eq_ignore_ascii_case("ERR")
-        && error.details().is_some_and(|details| {
-            details.to_ascii_lowercase().contains("invalid node")
-        }))
 }
 
 async fn discover_cluster_nodes(
@@ -606,10 +592,48 @@ async fn discover_cluster_nodes(
     if nodes.is_empty() {
         return Err(redis::RedisError::from((
             redis::ErrorKind::Client,
-            "No primary nodes were returned by CLUSTER SLOTS",
+            "No primary nodes were returned by CLUSTER NODES",
         )));
     }
     Ok(nodes.into_values().collect())
+}
+
+async fn discover_cluster_primaries(
+    connection: &mut RedisConnection,
+) -> redis::RedisResult<Vec<ScanNode>> {
+    let mut command = redis::cmd("CLUSTER");
+    command.arg("SLOTS");
+    let response = execute(connection, command).await?;
+    let slots: Vec<Vec<Value>> = redis::from_redis_value(response)?;
+    let mut primaries = BTreeMap::new();
+    for slot in slots {
+        let Some(Value::Array(primary)) = slot.get(2) else {
+            continue;
+        };
+        let Some(host) = primary.first().and_then(value_text) else {
+            continue;
+        };
+        let Some(port) = primary
+            .get(1)
+            .and_then(value_int)
+            .and_then(|port| u16::try_from(port).ok())
+        else {
+            continue;
+        };
+        primaries.entry((host.clone(), port)).or_insert(ScanNode {
+            host,
+            port,
+            node_id: None,
+            cursor: 0,
+        });
+    }
+    if primaries.is_empty() {
+        return Err(redis::RedisError::from((
+            redis::ErrorKind::Client,
+            "No primary nodes were returned by CLUSTER SLOTS",
+        )));
+    }
+    Ok(primaries.into_values().collect())
 }
 
 async fn list_keys(
@@ -619,6 +643,11 @@ async fn list_keys(
 ) -> ApiResult<Json<KeyPage>> {
     let (instance, page_size) = find_instance(&state, id).await?;
     let prefix = query.get("prefix").cloned().unwrap_or_default();
+    let view = if query.get("view").is_some_and(|value| value == "flat") {
+        "flat"
+    } else {
+        "tree"
+    };
     if prefix.contains('\0') {
         return Err(api_error(StatusCode::BAD_REQUEST, "Invalid key prefix"));
     }
@@ -640,39 +669,79 @@ async fn list_keys(
             cursor: 0,
         }],
         current: 0,
-        use_node_id: false,
+        use_node_id: instance.scan_node_id,
     });
     if matches!(instance.mode, RedisMode::Cluster) && query.get("cursor").is_none() {
-        scan_state.nodes = discover_cluster_nodes(&mut connection)
-            .await
-            .map_err(redis_error)?;
+        scan_state.use_node_id = instance.scan_node_id;
+        scan_state.nodes = if instance.scan_node_id {
+            discover_cluster_nodes(&mut connection).await
+        } else {
+            discover_cluster_primaries(&mut connection).await
+        }
+        .map_err(redis_error)?;
     }
     let pattern = format!("{}*", glob_escape(&prefix));
     let (keys, scanned) = scan_keys(&mut connection, &mut scan_state, &pattern, page_size)
         .await
         .map_err(redis_error)?;
-    let mut children: BTreeMap<(String, bool), Option<String>> = BTreeMap::new();
+    let mut children: BTreeMap<(String, bool), (Option<String>, Option<String>)> = BTreeMap::new();
     for key in keys {
-        let Some(remainder) = key.strip_prefix(&prefix) else {
+        let Some(remainder) = key.strip_prefix(prefix.as_bytes()) else {
             continue;
         };
         if remainder.is_empty() {
             continue;
         }
-        if let Some((name, _)) = remainder.split_once(':') {
+        if view == "flat" {
+            let key_text = String::from_utf8(key.clone()).ok();
+            let key_b64 = key_text.is_none().then(|| URL_SAFE_NO_PAD.encode(&key));
+            let display = key_text.clone().unwrap_or_else(|| {
+                format!("[binary key: {}]", key_b64.as_deref().unwrap_or_default())
+            });
+            children.insert((display, false), (key_text, key_b64));
+        } else if let Some(separator) = remainder.iter().position(|byte| *byte == b':') {
+            let name = &remainder[..separator];
             if !name.is_empty() {
-                children.entry((name.to_string(), true)).or_insert(None);
+                if let Ok(name) = String::from_utf8(name.to_vec()) {
+                    children.entry((name, true)).or_insert((None, None));
+                } else {
+                    let encoded = URL_SAFE_NO_PAD.encode(&key);
+                    children.insert(
+                        (format!("[binary key: {encoded}]"), false),
+                        (None, Some(encoded)),
+                    );
+                }
             }
         } else {
-            children.insert((remainder.to_string(), false), Some(key));
+            match String::from_utf8(key.clone()) {
+                Ok(key_text) => {
+                    children.insert(
+                        (String::from_utf8_lossy(remainder).into_owned(), false),
+                        (Some(key_text), None),
+                    );
+                }
+                Err(_) => {
+                    let encoded = URL_SAFE_NO_PAD.encode(&key);
+                    children.insert(
+                        (format!("[binary key: {encoded}]"), false),
+                        (None, Some(encoded)),
+                    );
+                }
+            }
         }
     }
     let nodes = children
         .into_iter()
-        .map(|((name, is_dir), key)| KeyEntry { name, key, is_dir })
+        .map(|((name, is_dir), (key, key_b64))| KeyEntry {
+            name,
+            key,
+            key_b64,
+            is_dir,
+        })
         .collect();
     Ok(Json(KeyPage {
         prefix,
+        view: view.to_string(),
         nodes,
         cursor: encode_scan_state(&scan_state),
         scanned,
@@ -725,16 +794,27 @@ struct ValuePage {
     items: JsonValue,
 }
 
+fn query_key(query: &BTreeMap<String, String>) -> ApiResult<(Vec<u8>, String)> {
+    if let Some(encoded) = query.get("key_b64") {
+        let key = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid encoded key"))?;
+        return Ok((key, format!("base64:{encoded}")));
+    }
+    let key = query
+        .get("key")
+        .cloned()
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Missing key"))?;
+    Ok((key.as_bytes().to_vec(), key))
+}
+
 async fn get_value(
     State(state): State<AppState>,
     Path(id): Path<usize>,
     Query(query): Query<BTreeMap<String, String>>,
 ) -> ApiResult<Json<ValuePage>> {
     let (instance, page_size) = find_instance(&state, id).await?;
-    let key = query
-        .get("key")
-        .cloned()
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Missing key"))?;
+    let (key, display_key) = query_key(&query)?;
     let database = query
         .get("db")
         .and_then(|value| value.parse().ok())
@@ -753,7 +833,7 @@ async fn get_value(
         .map_err(redis_error)?;
 
     let mut type_command = redis::cmd("TYPE");
-    type_command.arg(&key);
+    type_command.arg(key.as_slice());
     let kind = value_text(
         &execute(&mut connection, type_command)
             .await
@@ -761,7 +841,7 @@ async fn get_value(
     )
     .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Key no longer exists"))?;
     let mut ttl_command = redis::cmd("PTTL");
-    ttl_command.arg(&key);
+    ttl_command.arg(key.as_slice());
     let ttl_ms = value_int(
         &execute(&mut connection, ttl_command)
             .await
@@ -772,7 +852,7 @@ async fn get_value(
     let (items, total) = match kind.as_str() {
         "string" => {
             let mut len_command = redis::cmd("STRLEN");
-            len_command.arg(&key);
+            len_command.arg(key.as_slice());
             let total = value_int(
                 &execute(&mut connection, len_command)
                     .await
@@ -781,7 +861,7 @@ async fn get_value(
             .unwrap_or(0);
             let mut get_command = redis::cmd("GETRANGE");
             get_command
-                .arg(&key)
+                .arg(key.as_slice())
                 .arg(offset)
                 .arg(offset + page_size as i64 - 1);
             let data = execute(&mut connection, get_command)
@@ -794,7 +874,7 @@ async fn get_value(
         }
         "hash" => {
             let mut len_command = redis::cmd("HLEN");
-            len_command.arg(&key);
+            len_command.arg(key.as_slice());
             let total = value_int(
                 &execute(&mut connection, len_command)
                     .await
@@ -802,7 +882,10 @@ async fn get_value(
             )
             .unwrap_or(0);
             let mut scan = redis::cmd("HSCAN");
-            scan.arg(&key).arg(offset).arg("COUNT").arg(page_size);
+            scan.arg(key.as_slice())
+                .arg(offset)
+                .arg("COUNT")
+                .arg(page_size);
             let (next, pairs): (u64, Vec<Value>) =
                 redis::from_redis_value(execute(&mut connection, scan).await.map_err(redis_error)?)
                     .map_err(parse_error)?;
@@ -812,7 +895,7 @@ async fn get_value(
         }
         "list" => {
             let mut len_command = redis::cmd("LLEN");
-            len_command.arg(&key);
+            len_command.arg(key.as_slice());
             let total = value_int(
                 &execute(&mut connection, len_command)
                     .await
@@ -821,7 +904,7 @@ async fn get_value(
             .unwrap_or(0);
             let mut range = redis::cmd("LRANGE");
             range
-                .arg(&key)
+                .arg(key.as_slice())
                 .arg(offset)
                 .arg(offset + page_size as i64 - 1);
             let items: Vec<Value> = redis::from_redis_value(
@@ -837,7 +920,7 @@ async fn get_value(
         }
         "set" => {
             let mut size_command = redis::cmd("SCARD");
-            size_command.arg(&key);
+            size_command.arg(key.as_slice());
             let total = value_int(
                 &execute(&mut connection, size_command)
                     .await
@@ -845,7 +928,10 @@ async fn get_value(
             )
             .unwrap_or(0);
             let mut scan = redis::cmd("SSCAN");
-            scan.arg(&key).arg(offset).arg("COUNT").arg(page_size);
+            scan.arg(key.as_slice())
+                .arg(offset)
+                .arg("COUNT")
+                .arg(page_size);
             let (next, values): (u64, Vec<Value>) =
                 redis::from_redis_value(execute(&mut connection, scan).await.map_err(redis_error)?)
                     .map_err(parse_error)?;
@@ -857,7 +943,7 @@ async fn get_value(
         }
         "zset" => {
             let mut size_command = redis::cmd("ZCARD");
-            size_command.arg(&key);
+            size_command.arg(key.as_slice());
             let total = value_int(
                 &execute(&mut connection, size_command)
                     .await
@@ -866,7 +952,7 @@ async fn get_value(
             .unwrap_or(0);
             let mut range = redis::cmd("ZRANGE");
             range
-                .arg(&key)
+                .arg(key.as_slice())
                 .arg(offset)
                 .arg(offset + page_size as i64 - 1)
                 .arg("WITHSCORES");
@@ -881,7 +967,7 @@ async fn get_value(
         }
         "stream" => {
             let mut len_command = redis::cmd("XLEN");
-            len_command.arg(&key);
+            len_command.arg(key.as_slice());
             let total = value_int(
                 &execute(&mut connection, len_command)
                     .await
@@ -890,7 +976,7 @@ async fn get_value(
             .unwrap_or(0);
             let mut range = redis::cmd("XRANGE");
             range
-                .arg(&key)
+                .arg(key.as_slice())
                 .arg(if raw_cursor.is_none() {
                     "-".to_string()
                 } else {
@@ -922,7 +1008,7 @@ async fn get_value(
         }
     };
     Ok(Json(ValuePage {
-        key,
+        key: display_key,
         kind,
         ttl_ms,
         total,
@@ -936,10 +1022,7 @@ async fn download_value(
     Path(id): Path<usize>,
     Query(query): Query<BTreeMap<String, String>>,
 ) -> ApiResult<Response> {
-    let key = query
-        .get("key")
-        .cloned()
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Missing key"))?;
+    let (key, display_key) = query_key(&query)?;
     let (instance, _) = find_instance(&state, id).await?;
     let database = query
         .get("db")
@@ -952,7 +1035,7 @@ async fn download_value(
         .await
         .map_err(redis_error)?;
     let mut type_command = redis::cmd("TYPE");
-    type_command.arg(&key);
+    type_command.arg(key.as_slice());
     let kind = value_text(
         &execute(&mut connection, type_command)
             .await
@@ -961,14 +1044,14 @@ async fn download_value(
     .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Key no longer exists"))?;
     let (body, content_type, extension) = if kind == "string" {
         let mut command = redis::cmd("GET");
-        command.arg(&key);
+        command.arg(key.as_slice());
         let value = execute(&mut connection, command)
             .await
             .map_err(redis_error)?;
         let bytes = value_bytes(&value).unwrap_or_default().to_vec();
         (bytes, "application/octet-stream", "bin")
     } else {
-        let (value, _, _) = fetch_download_snapshot(&mut connection, &key, &kind)
+        let (value, _, _) = fetch_download_snapshot(&mut connection, &key, &display_key, &kind)
             .await
             .map_err(redis_error)?;
         (
@@ -992,7 +1075,8 @@ async fn download_value(
 
 async fn fetch_download_snapshot(
     connection: &mut RedisConnection,
-    key: &str,
+    key: &[u8],
+    display_key: &str,
     kind: &str,
 ) -> redis::RedisResult<(JsonValue, Option<i64>, Option<String>)> {
     let value = match kind {
@@ -1024,7 +1108,7 @@ async fn fetch_download_snapshot(
         _ => JsonValue::Null,
     };
     Ok((
-        json!({"key": key, "type": kind, "items": value, "note": "Collections are limited to 10000 entries; streams to 1000 entries per download."}),
+        json!({"key": display_key, "type": kind, "items": value, "note": "Collections are limited to 10000 entries; streams to 1000 entries per download."}),
         None,
         None,
     ))
@@ -1040,10 +1124,7 @@ async fn delete_key(
     Path(id): Path<usize>,
     Query(query): Query<BTreeMap<String, String>>,
 ) -> ApiResult<Json<DeleteResponse>> {
-    let key = query
-        .get("key")
-        .cloned()
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Missing key"))?;
+    let (key, _) = query_key(&query)?;
     let (instance, _) = find_instance(&state, id).await?;
     if !state.config.read().await.allow_delete {
         return Err(api_error(StatusCode::FORBIDDEN, "Key deletion is disabled"));
@@ -1059,7 +1140,7 @@ async fn delete_key(
         .await
         .map_err(redis_error)?;
     let mut command = redis::cmd("UNLINK");
-    command.arg(&key);
+    command.arg(key.as_slice());
     let removed: i64 = redis::from_redis_value(
         execute(&mut connection, command)
             .await

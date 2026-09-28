@@ -26,3 +26,4 @@ database = 0
 #name = "Cluster"
 #mode = "cluster"
 #addresses = ["redis://127.0.0.1:6379", "redis://127.0.0.2:6379"]
+#scan_node_id = false

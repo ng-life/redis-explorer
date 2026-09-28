@@ -1,6 +1,6 @@
 # Redis Explorer
 
-一个使用 Rust 编写的 Redis Web 浏览器。支持多个 Redis 独立实例、Sentinel 和 Cluster，通过浏览器查看数据库、按 `:` 分层浏览 key，并查看常见数据类型。Cluster 模式会逐个主节点使用游标扫描；对腾讯云旧版代理自动在 `SCAN` 中补充节点 ID。
+一个使用 Rust 编写的 Redis Web 浏览器。支持多个 Redis 独立实例、Sentinel 和 Cluster，通过浏览器查看数据库、按 `:` 分层或平铺浏览 key，并查看常见数据类型。Cluster 模式会逐个主节点使用游标扫描。
 
 ## 配置
 
@@ -22,7 +22,7 @@ addresses = ["redis://:password@127.0.0.1:6379/0"]
 database = 0
 ```
 
-支持的 `mode`：`standalone`、`sentinel`、`cluster`。删除 key 默认关闭；需要时可在配置中设为 `allow_delete = true`，或使用 `--allow-delete`。重新开启风险操作时请确保服务只对可信网络开放。
+支持的 `mode`：`standalone`、`sentinel`、`cluster`。删除 key 默认关闭；需要时可在配置中设为 `allow_delete = true`，或使用 `--allow-delete`。腾讯云旧版代理如要求 `SCAN` 命令附带节点 ID，可在对应 Cluster 实例中设置 `scan_node_id = true`；默认关闭，标准 Redis Cluster 无需开启。重新开启风险操作时请确保服务只对可信网络开放。
 
 ## 启动
 
