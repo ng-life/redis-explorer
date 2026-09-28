@@ -1,0 +1,28 @@
+listen = "127.0.0.1:8080"
+allow_delete = false
+page_size = 100
+
+# Independent Redis instance
+[[instances]]
+name = "Local Redis"
+mode = "standalone"
+addresses = ["redis://127.0.0.1:6379"]
+database = 0
+
+# Redis Sentinel. Use redis:// or rediss:// URLs for Sentinel addresses.
+# Configure Redis-node credentials separately when they differ from Sentinel credentials.
+#[[instances]]
+#name = "Sentinel cache"
+#mode = "sentinel"
+#addresses = ["redis://127.0.0.1:26379", "redis://127.0.0.2:26379"]
+#master_name = "mymaster"
+#username = "default"
+#password = "change-me"
+#database = 0
+#tls = false
+
+# Redis Cluster (database 0 only). Provide one or more seed-node URLs.
+#[[instances]]
+#name = "Cluster"
+#mode = "cluster"
+#addresses = ["redis://127.0.0.1:6379", "redis://127.0.0.2:6379"]

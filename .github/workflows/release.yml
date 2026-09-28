@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset: redis-explorer-linux-x86_64
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            asset: redis-explorer-macos-aarch64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust target
+        run: rustup target add "${TARGET}"
+        env:
+          TARGET: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --locked --release --target "${TARGET}"
+        env:
+          TARGET: ${{ matrix.target }}
+
+      - name: Stage release asset
+        run: cp "target/${TARGET}/release/redis-explorer" "${RUNNER_TEMP}/${ASSET}"
+        env:
+          TARGET: ${{ matrix.target }}
+          ASSET: ${{ matrix.asset }}
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ runner.temp }}/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: redis-explorer-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create release and attach binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --verify-tag --generate-notes --repo "${GITHUB_REPOSITORY}"
