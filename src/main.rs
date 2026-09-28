@@ -527,13 +527,7 @@ async fn discover_cluster_nodes(
     let slots: Vec<Vec<Value>> = redis::from_redis_value(response)?;
     let mut nodes = BTreeMap::new();
     for slot in slots {
-        let Some(primary) = slot.get(2).and_then(|value| match value {
-            Value::Array(values) => values.first(),
-            _ => None,
-        }) else {
-            continue;
-        };
-        let Value::Array(primary) = primary else {
+        let Some(Value::Array(primary)) = slot.get(2) else {
             continue;
         };
         let Some(host) = primary.first().and_then(value_text) else {
