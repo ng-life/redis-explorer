@@ -42,7 +42,7 @@ func loadConfig(args []string, output io.Writer) (Config, error) {
 	fs.SetOutput(output)
 	path := fs.String("config", "config.toml", "TOML configuration file")
 	fs.StringVar(path, "c", "config.toml", "TOML configuration file")
-	listen := fs.String("listen", "", "Web server bind address")
+	listen := fs.String("listen", "", "Web and MCP server bind address")
 	allow := fs.Bool("allow-delete", false, "Enable deletion of individual keys")
 	disable := fs.Bool("disable-delete", false, "Disable deletion of individual keys")
 	var instances redisFlags

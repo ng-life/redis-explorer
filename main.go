@@ -35,7 +35,7 @@ func main() {
 		defer cancel()
 		_ = server.Shutdown(shutdown)
 	}()
-	slog.Info("Redis Explorer is ready", "address", c.Listen)
+	slog.Info("Redis Explorer is ready", "address", c.Listen, "mcp", "/mcp (Streamable HTTP)")
 	if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

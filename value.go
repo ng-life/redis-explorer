@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/redis/go-redis/v9"
-	"net/http"
 	"strconv"
 	"unicode/utf8"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // Redis strings contain arbitrary bytes; JSON must never replace invalid UTF-8.
@@ -28,29 +29,31 @@ func redisJSON(value any) any {
 		return v
 	}
 }
-func (a application) value(w http.ResponseWriter, r *http.Request, i Instance, c redis.UniversalClient) error {
-	key, display, err := queryKey(r.URL.Query())
+func (a application) readValue(ctx context.Context, c redis.UniversalClient, in redisOperationInput) (any, error) {
+	key, display, err := operationKey(in)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ctx := r.Context()
 	kind, err := c.Type(ctx, key).Result()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if kind == "none" {
-		return &apiError{404, "Key no longer exists"}
+		return nil, &apiError{404, "Key no longer exists"}
 	}
 	ttl, err := c.Do(ctx, "PTTL", key).Int64()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	raw := r.URL.Query().Get("cursor")
+	raw := ""
+	if in.Cursor != nil {
+		raw = *in.Cursor
+	}
 	offset := int64(0)
 	if raw != "" && kind != "stream" {
 		offset, err = strconv.ParseInt(raw, 10, 64)
 		if err != nil || offset < 0 {
-			return bad("Invalid value cursor")
+			return nil, bad("Invalid value cursor")
 		}
 	}
 	size := int64(a.config.PageSize)
@@ -78,11 +81,11 @@ func (a application) value(w http.ResponseWriter, r *http.Request, i Instance, c
 	case "stream":
 		countCmd = "XLEN"
 	default:
-		return &apiError{502, "Unsupported Redis key type: " + kind}
+		return nil, &apiError{502, "Unsupported Redis key type: " + kind}
 	}
 	total, err = c.Do(ctx, countCmd, key).Int64()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	switch kind {
 	case "string":
@@ -111,10 +114,10 @@ func (a application) value(w http.ResponseWriter, r *http.Request, i Instance, c
 		}
 		values, e := c.Do(ctx, cmd, key, offset, "COUNT", size).Slice()
 		if e != nil {
-			return e
+			return nil, e
 		}
 		if len(values) != 2 {
-			return fmt.Errorf("invalid collection scan response")
+			return nil, fmt.Errorf("invalid collection scan response")
 		}
 		next := fmt.Sprint(values[0])
 		if next != "0" {
@@ -122,7 +125,7 @@ func (a application) value(w http.ResponseWriter, r *http.Request, i Instance, c
 		}
 		page, ok := values[1].([]any)
 		if !ok {
-			return fmt.Errorf("invalid collection items")
+			return nil, fmt.Errorf("invalid collection items")
 		}
 		if kind == "hash" {
 			items = paired(page, "field", "value")
@@ -145,10 +148,9 @@ func (a application) value(w http.ResponseWriter, r *http.Request, i Instance, c
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	writeJSON(w, map[string]any{"key": display, "kind": kind, "ttl_ms": ttl, "total": total, "cursor": cursor, "items": items})
-	return nil
+	return map[string]any{"key": display, "kind": kind, "ttl_ms": ttl, "total": total, "cursor": cursor, "items": items}, nil
 }
 func paired(values []any, a, b string) []any {
 	out := []any{}
@@ -157,18 +159,17 @@ func paired(values []any, a, b string) []any {
 	}
 	return out
 }
-func (a application) download(w http.ResponseWriter, r *http.Request, i Instance, c redis.UniversalClient) error {
-	key, display, err := queryKey(r.URL.Query())
+func (a application) exportKey(ctx context.Context, c redis.UniversalClient, in redisOperationInput) (any, error) {
+	key, display, err := operationKey(in)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ctx := r.Context()
 	kind, err := c.Type(ctx, key).Result()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if kind == "none" {
-		return &apiError{404, "Key no longer exists"}
+		return nil, &apiError{404, "Key no longer exists"}
 	}
 	var body []byte
 	contentType, extension := "application/json", "json"
@@ -190,19 +191,16 @@ func (a application) download(w http.ResponseWriter, r *http.Request, i Instance
 		case "stream":
 			args = []any{"XRANGE", key, "-", "+", "COUNT", 1000}
 		default:
-			return &apiError{502, "Unsupported Redis key type: " + kind}
+			return nil, &apiError{502, "Unsupported Redis key type: " + kind}
 		}
 		value, e := c.Do(ctx, args...).Result()
 		if e != nil {
-			return e
+			return nil, e
 		}
 		body, err = json.MarshalIndent(map[string]any{"key": display, "type": kind, "items": redisJSON(value), "note": "Lists and sorted sets are limited to 10000 entries; streams to 1000 entries per download. Hashes and sets are exported in full."}, "", "  ")
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", "attachment; filename=\"redis-key."+extension+"\"")
-	_, err = w.Write(body)
-	return err
+	return exportResult{Body: body, ContentType: contentType, Extension: extension}, nil
 }
