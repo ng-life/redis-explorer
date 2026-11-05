@@ -6,7 +6,23 @@
   <title>Redis Explorer</title>
   <style>
     :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1d2939;background:#f5f7fa;font-synthesis:none}*{box-sizing:border-box}body{margin:0}.topbar{height:64px;background:#fff;border-bottom:1px solid #eaecf0;display:flex;align-items:center;padding:0 28px;gap:12px}.logo{width:34px;height:34px;border-radius:10px;background:#d92d20;color:white;display:grid;place-items:center;font-weight:800}.brand{font-size:15px;font-weight:650}.tag{font-size:11px;color:#b42318;background:#fef3f2;padding:4px 8px;border-radius:20px}.layout{max-width:1440px;margin:auto;padding:28px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px}.sidebar,.panel,.detail{background:#fff;border:1px solid #eaecf0;border-radius:12px;box-shadow:0 2px 6px #10182808}.sidebar{height:calc(100vh - 120px);min-height:440px;padding:16px 12px;overflow:auto}.side-title{padding:6px 10px 14px;color:#98a2b3;font-size:11px;font-weight:650;letter-spacing:.08em}.instance{width:100%;border:0;background:transparent;padding:11px 10px;display:flex;text-align:left;border-radius:8px;cursor:pointer;color:#344054;margin:2px 0;gap:10px}.instance:hover{background:#f8fafc}.instance.active{background:#fff1f0;color:#b42318}.instance-icon{width:30px;height:30px;border:1px solid #eaecf0;border-radius:8px;display:grid;place-items:center;flex:none}.instance-name{font-size:13px;font-weight:600}.instance-mode{font-size:10px;color:#98a2b3;margin-top:4px;text-transform:capitalize}.main{min-width:0}.heading{display:flex;align-items:flex-start;margin:4px 0 20px}.heading h1{font-size:22px;margin:0 0 6px;letter-spacing:-.03em}.sub{color:#667085;font-size:13px}.state{margin-left:auto;color:#039855;background:#f6fef9;border:1px solid #d1fadf;border-radius:18px;padding:6px 10px;font-size:11px}.toolbar{padding:14px 17px;border-bottom:1px solid #eaecf0;display:flex;align-items:center;gap:10px;min-height:54px}.db-select,.search,.button{border:1px solid #d0d5dd;border-radius:7px;background:#fff;padding:8px 10px;color:#344054;font-size:12px}.search{flex:1;min-width:100px}.button{cursor:pointer;white-space:nowrap}.button:hover{background:#f9fafb}.button.active{background:#eff8ff;border-color:#84caff;color:#175cd3}.button.danger{color:#b42318;border-color:#fecdca}.crumbs{display:flex;align-items:center;gap:4px;overflow:auto;margin:15px 0 8px;font:12px ui-monospace,monospace;white-space:nowrap}.crumb{border:0;background:transparent;padding:5px;color:#475467;cursor:pointer}.crumb:hover{background:#f2f4f7;border-radius:5px}.crumb.current{font-weight:650;color:#101828;cursor:default}.content-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px}.panel{overflow:hidden}.table-head,.row{display:grid;grid-template-columns:minmax(140px,1fr) 110px 110px;gap:10px;align-items:center;padding:12px 15px}.table-head{background:#fcfcfd;color:#667085;font-size:11px;border-bottom:1px solid #eaecf0}.row{border-bottom:1px solid #f2f4f7;min-height:54px;cursor:pointer}.row:hover{background:#fffafa}.row:last-child{border-bottom:0}.key-name{font-size:13px;font-weight:550;color:#344054;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.key-icon{width:30px;height:30px;border-radius:8px;background:#fff7ed;color:#c2410c;display:grid;place-items:center;flex:none}.key-icon.file{background:#f2f4f7;color:#667085}.name-cell{display:flex;align-items:center;gap:10px;min-width:0}.kind,.ttl{font-size:11px;color:#667085}.empty,.welcome{padding:55px 16px;text-align:center;color:#98a2b3;font-size:13px}.more{width:100%;border:0;background:#fff;padding:13px;color:#175cd3;cursor:pointer;font-size:12px}.more:hover{background:#f9fafb}.detail{padding:16px;min-height:250px;overflow:hidden}.detail h2{font-size:14px;margin:0 0 13px}.detail-path{font:11px ui-monospace,monospace;word-break:break-all;color:#475467;background:#f9fafb;border:1px solid #eaecf0;border-radius:7px;padding:9px;margin:10px 0}.detail-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:#667085;margin:10px 0}.data{font:11px ui-monospace,monospace;line-height:1.6;background:#101828;color:#d0d5dd;border-radius:8px;padding:12px;max-height:440px;overflow:auto;white-space:pre-wrap;word-break:break-word}.detail-actions{display:flex;gap:8px;margin:12px 0}.alert{color:#b42318;background:#fef3f2;border:1px solid #fecdca;padding:11px 13px;border-radius:8px;font-size:12px;margin:0 0 12px}.pagination-note{padding:10px 15px;border-top:1px solid #eaecf0;color:#98a2b3;font-size:10px}@media(max-width:1050px){.content-grid{grid-template-columns:1fr}.detail{min-height:0}}@media(max-width:680px){.layout{display:block;padding:14px}.sidebar{height:auto;min-height:0;margin-bottom:15px}.instance-list{display:flex;overflow:auto}.instance{min-width:190px}.topbar{padding:0 15px}.heading h1{font-size:19px}.table-head,.row{grid-template-columns:minmax(110px,1fr) 70px 75px;padding:10px}.toolbar{flex-wrap:wrap}.search{order:3;flex-basis:100%}}
-  </style>
+        .mcp-fab { position: fixed; right: calc(20px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 40; width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #d1e0ff; border-radius: 50%; color: #175cd3; background: white; box-shadow: 0 4px 16px #10182826; }
+      .mcp-fab:hover { color: white; background: #1677ff; border-color: #1677ff; }
+      .mcp-panel { margin: auto; width: min(780px, calc(100vw - 32px)); max-height: 85dvh; overflow: auto; padding: 20px; font-size: 12px; color: #475467; }
+      .mcp-panel::backdrop { background: #10182866; }
+      .mcp-dialog-head { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+      .mcp-dialog-head h2 { margin: 0; font-size: 15px; line-height: 1.6; }
+      .mcp-panel p { line-height: 1.8; overflow-wrap: anywhere; }
+      .mcp-connection { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+      .mcp-input { flex: 1 1 200px; min-width: 0; padding: 8px; border: 1px solid #d0d5dd; border-radius: 7px; font: 12px ui-monospace, monospace; }
+      .mcp-config { padding: 12px; background: #f9fafb; border: 1px solid #eaecf0; border-radius: 7px; overflow: auto; font: 12px/1.7 ui-monospace, monospace; }
+      .mcp-tools { overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+
+.mcp-panel { border: 1px solid #eaecf0; border-radius: 12px; background: white; box-shadow: 0 24px 64px #10182840; }
+.mcp-fab:focus-visible, .mcp-panel button:focus-visible, .mcp-input:focus-visible { outline: 2px solid #1677ff; outline-offset: 3px; }
+.mcp-copy-status { flex-basis: 100%; min-height: 1.5em; }
+@media (max-width: 480px) { .mcp-panel { padding: 16px; } .mcp-dialog-head { align-items: flex-start; } .mcp-input { flex-basis: 100%; } }
+</style>
 </head>
 <body>
   <header class="topbar"><div class="logo">R</div><div class="brand">Redis Explorer</div><span id="deleteStatus" class="tag">READ ONLY</span></header>
@@ -22,6 +38,27 @@
       </section>
     </main>
   </div>
+    <button id="openMCPHelp" type="button" class="mcp-fab" aria-label="MCP 接入配置" aria-haspopup="dialog" title="MCP 接入配置">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 3v4m6-4v4M7 7h10v3a5 5 0 0 1-10 0V7Zm5 8v3a3 3 0 0 0 3 3h3" />
+      </svg>
+    </button>
+    <dialog id="mcpHelp" class="panel mcp-panel" aria-labelledby="mcpHelpTitle">
+      <div class="mcp-dialog-head"><h2 id="mcpHelpTitle">MCP 接入配置 · Streamable HTTP</h2><button id="closeMCPHelp" type="button" class="button">关闭</button></div>
+      <p>在 MCP 客户端选择「Streamable HTTP」，填写下面的服务地址。MCP 随服务一同启动，与网页共用端口，无需独立进程；不使用旧版 /sse 地址。</p>
+      <div class="mcp-connection">
+        <input id="mcpURL" class="mcp-input" aria-label="MCP 服务地址" readonly />
+        <button id="copyMCPURL" type="button" class="button">复制 MCP 地址</button>
+        <button id="copyMCPConfig" type="button" class="button">复制配置示例</button>
+        <span id="mcpCopyStatus" class="mcp-copy-status" role="status"></span>
+      </div>
+      <pre id="mcpConfig" class="mcp-config"></pre>
+      <p>上方为常见 mcpServers 格式示例，配置字段以客户端要求为准。远程访问时使用服务器地址，并确保 listen 绑定到可达地址；本机地址 127.0.0.1 只适用于同一台电脑。</p>
+      <p>读取工具：<span class="mcp-tools">list_connections、list_databases、list_keys、get_value、export_key</span>。先使用 list_connections 选择 connection；多个连接时必须指定名称。</p>
+      <p id="mcpDeleteState">delete_key 仅在 allow_delete 开启时提供。删除失败或超时后先核对 key 状态，不要自动重试。</p>
+      <p>list_keys 和 get_value 使用返回的 cursor 翻页；SCAN 中间页可能为空，cursor 为 null 时结束。二进制 key 使用 key_b64，值按需以 Base64 返回。</p>
+      <p>服务无内置登录，远程接入应配置认证代理或网络访问控制。</p>
+    </dialog>
 <script>
 const $=id=>document.getElementById(id);let instances=[],active=-1,db=0,prefix='',viewMode='tree',cursor=null,allowDelete=false,selectedKey=null,selectedKeyB64=null,requestId=0,nodeMap=new Map();
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,7 +66,7 @@ async function api(url,options){const r=await fetch(url,options);const body=awai
 function urlFor(){const q=new URLSearchParams();if(active>=0)q.set('instance',active);q.set('db',db);if(prefix)q.set('prefix',prefix);if(viewMode==='flat')q.set('view','flat');if(selectedKey)q.set('key',selectedKey);if(selectedKeyB64)q.set('key_b64',selectedKeyB64);return`${location.pathname}?${q}`}
 function setHistory(mode='push'){const url=urlFor();if(`${location.pathname}${location.search}`!==url)history[`${mode}State`]({instance:active,db,prefix,view:viewMode,key:selectedKey,keyB64:selectedKeyB64},'',url)}
 function locationState(){const q=new URLSearchParams(location.search);return{instance:Number(q.get('instance')||0),db:Number(q.get('db')||0),prefix:q.get('prefix')||'',view:q.get('view')==='flat'?'flat':'tree',key:q.get('key')||null,keyB64:q.get('key_b64')||null}}
-async function init(){try{const [list,settings]=await Promise.all([api('/api/instances'),api('/api/settings')]);instances=list;allowDelete=settings.allow_delete;$('deleteStatus').textContent=allowDelete?'DELETION ENABLED':'READ ONLY';$('deleteStatus').title=allowDelete?'Key deletion is enabled by configuration':'Key deletion is disabled by configuration';$('instanceCount').textContent=`· ${instances.length}`;$('instances').innerHTML=instances.length?instances.map((item,i)=>`<button class="instance" data-id="${i}"><span class="instance-icon">◉</span><span><div class="instance-name">${esc(item.name)}</div><div class="instance-mode">${esc(item.mode)}</div></span></button>`).join(''):'<div class="sub" style="padding:10px">未配置 Redis 实例，请编辑配置文件。</div>';$('instances').querySelectorAll('[data-id]').forEach(button=>button.onclick=()=>selectInstance(Number(button.dataset.id),0,'push'));if(instances.length){const state=locationState();selectInstance(Number.isInteger(state.instance)&&instances[state.instance]?state.instance:0,state.db,'replace',state.prefix,state.key,state.view,state.keyB64)}}catch(e){showError(e.message)}}
+async function init(){try{const [list,settings]=await Promise.all([api('/api/instances'),api('/api/settings')]);instances=list;allowDelete=settings.allow_delete;$('mcpDeleteState').textContent=allowDelete?'当前服务已开启 allow_delete，提供 delete_key，可实际删除单个 key。失败或超时后先核对状态，不要自动重试。':'当前服务已关闭 allow_delete，不提供 delete_key；读取与导出工具仍可使用。';$('deleteStatus').textContent=allowDelete?'DELETION ENABLED':'READ ONLY';$('deleteStatus').title=allowDelete?'Key deletion is enabled by configuration':'Key deletion is disabled by configuration';$('instanceCount').textContent=`· ${instances.length}`;$('instances').innerHTML=instances.length?instances.map((item,i)=>`<button class="instance" data-id="${i}"><span class="instance-icon">◉</span><span><div class="instance-name">${esc(item.name)}</div><div class="instance-mode">${esc(item.mode)}</div></span></button>`).join(''):'<div class="sub" style="padding:10px">未配置 Redis 实例，请编辑配置文件。</div>';$('instances').querySelectorAll('[data-id]').forEach(button=>button.onclick=()=>selectInstance(Number(button.dataset.id),0,'push'));if(instances.length){const state=locationState();selectInstance(Number.isInteger(state.instance)&&instances[state.instance]?state.instance:0,state.db,'replace',state.prefix,state.key,state.view,state.keyB64)}}catch(e){showError(e.message)}}
 async function selectInstance(id,database,historyMode,p='',key=null,view='tree',keyB64=null){if(id<0||id>=instances.length)return;active=id;db=database;prefix=p;viewMode=view;selectedKey=key;selectedKeyB64=keyB64;nodeMap.clear();$('treeMode').classList.toggle('active',viewMode==='tree');$('flatMode').classList.toggle('active',viewMode==='flat');$('crumbs').hidden=viewMode==='flat';$('title').textContent=instances[id].name;$('subtitle').textContent=`${instances[id].mode} · 浏览 Redis key`;$('instances').querySelectorAll('[data-id]').forEach(button=>button.classList.toggle('active',Number(button.dataset.id)===id));if(historyMode)setHistory(historyMode);try{const databases=await api(`/api/instances/${id}/databases`);const options=databases.map(item=>`<option value="${item.id}">DB ${item.id}${item.keys===null?'':` · ${item.keys} keys`}</option>`).join('');$('database').innerHTML=options||'<option value="0">DB 0</option>';if(!databases.some(item=>item.id===db))db=databases[0]?.id||0;$('database').value=String(db);$('database').onchange=()=>{db=Number($('database').value);prefix='';selectedKey=null;selectedKeyB64=null;nodeMap.clear();setHistory();loadKeys()};$('search').value=prefix;await loadKeys();if(selectedKey||selectedKeyB64)await loadValue(selectedKey||`base64:${selectedKeyB64}`,null,selectedKeyB64)}catch(e){showError(e.message)}}
 async function loadKeys(append=false){if(active<0)return;const thisRequest=++requestId;if(!append){cursor=null;nodeMap.clear();$('rows').innerHTML='';$('detail').innerHTML='<h2>Key 详情</h2><div class="sub">选择一个 key 查看值。</div>'}$('state').textContent='扫描中';$('error').innerHTML='';$('empty').hidden=true;const q=new URLSearchParams({db:String(db),prefix,view:viewMode});if(append&&cursor)q.set('cursor',cursor);try{const page=await api(`/api/instances/${active}/keys?${q}`);if(thisRequest!==requestId)return;cursor=page.cursor;for(const item of page.nodes){const id=`${item.is_dir?'dir':'key'}:${item.key||item.key_b64||prefix+item.name+':'}`;if(nodeMap.has(id))continue;nodeMap.set(id,item);const row=document.createElement('div');row.className='row';row.innerHTML=`<div class="name-cell"><span class="key-icon ${item.is_dir?'':'file'}">${item.is_dir?'▰':'▤'}</span><span class="key-name" title="${esc(item.key||item.name)}">${esc(item.name)}</span></div><div class="kind">${item.is_dir?'目录':'Key'}</div><div class="ttl">${item.is_dir?'—':'点击查看'}</div>`;row.onclick=()=>item.is_dir?navigate(prefix+item.name+':'):loadValue(item.key||item.name,null,item.key_b64||null);$('rows').appendChild(row)}$('more').hidden=!cursor;$('empty').hidden=nodeMap.size>0||Boolean(cursor);$('empty').textContent=cursor?'本页没有新项目':'该前缀下没有 key';$('pageNote').textContent=`本次扫描 ${page.scanned} 个 key · 当前显示 ${nodeMap.size} 项`;$('state').textContent='已连接'}catch(e){if(thisRequest===requestId)showError(e.message)}}
 function navigate(nextPrefix){prefix=nextPrefix;selectedKey=null;selectedKeyB64=null;setHistory();renderCrumbs();loadKeys()}
@@ -40,6 +77,31 @@ async function loadValue(key,nextCursor=null,keyB64=null){selectedKey=keyB64?nul
 async function removeKey(key,keyB64=null){if(!confirm(`确定删除 Redis key？\n\n${key}`))return;try{await api(`/api/instances/${active}/keys?db=${db}&${keyB64?`key_b64=${encodeURIComponent(keyB64)}`:`key=${encodeURIComponent(key)}`}`,{method:'DELETE'});selectedKey=null;selectedKeyB64=null;setHistory('replace');await loadKeys()}catch(e){alert(`删除失败：${e.message}`)}}
 function showError(message){$('error').innerHTML=`<div class="alert">${esc(message)}</div>`;$('state').textContent='请求失败'}
 $('treeMode').onclick=()=>setView('tree');$('flatMode').onclick=()=>setView('flat');$('more').onclick=()=>loadKeys(true);$('refresh').onclick=()=>loadKeys();$('searchButton').onclick=()=>navigate($('search').value.trim());$('search').onkeydown=event=>{if(event.key==='Enter')navigate($('search').value.trim())};$('database').onchange=()=>{db=Number($('database').value);prefix='';selectedKey=null;selectedKeyB64=null;setHistory();renderCrumbs();loadKeys()};window.addEventListener('popstate',()=>{const state=locationState();selectInstance(Number.isInteger(state.instance)?state.instance:0,state.db,'',state.prefix,state.key,state.view,state.keyB64)});renderCrumbs();init();
+      $("openMCPHelp").onclick = () => {
+        $("mcpCopyStatus").textContent = "";
+        $("mcpHelp").showModal();
+      };
+      $("closeMCPHelp").onclick = () => $("mcpHelp").close();
+      const mcpURL = new URL("/mcp", window.location.origin).href;
+      $("mcpURL").value = mcpURL;
+      $("mcpConfig").textContent = JSON.stringify({mcpServers: {"redis-explorer": {type: "http", url: mcpURL}}}, null, 2);
+      async function copyMCP(text) {
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const input = document.createElement("textarea");
+            input.value = text;
+            input.style.cssText = "position:fixed;left:-9999px;top:0";
+            $("mcpHelp").append(input);
+            try { input.select(); if (!document.execCommand("copy")) throw Error("copy failed"); }
+            finally { input.remove(); }
+          }
+          $("mcpCopyStatus").textContent = "已复制";
+        } catch { $("mcpCopyStatus").textContent = "复制失败，请手动选择内容复制"; }
+      }
+      $("copyMCPURL").onclick = () => copyMCP(mcpURL);
+      $("copyMCPConfig").onclick = () => copyMCP($("mcpConfig").textContent);
 </script>
 </body>
 </html>
